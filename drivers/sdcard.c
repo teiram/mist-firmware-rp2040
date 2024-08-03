@@ -140,7 +140,7 @@ static uint8_t sd_cxd(pio_spi_inst_t *spi, uint8_t cmd[], uint8_t buf[]) {
   int timeout = 20;
   while (timeout--) {
     uint8_t status = get_next_byte(spi);
-    debug(("status %02X\n", status));
+    printf("status %02X\n", status);
     if (status == 0xfe) {
       break;
     }
@@ -436,7 +436,9 @@ static int sd_init_card_nosel(pio_spi_inst_t *spi) {
 
 int sd_init_card(pio_spi_inst_t *spi) {
   int r;
-  
+  printf("sd_init_card with miso:%d, mosi:%d, clk:%d, cs:%d\n", 
+     spi->miso_pin, spi->mosi_pin, spi->sck_pin, spi->cs_pin);
+
   pio_spi_select(spi, 1);
   r = sd_init_card_nosel(spi);
   pio_spi_select(spi, 0);
@@ -464,7 +466,8 @@ static pio_spi_inst_t spi = {
 
 pio_spi_inst_t *sd_hw_init() {
   static int firsttime = 1;
-  
+  printf("Initializing SPI PIO\n");
+
   gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
   gpio_put(PICO_DEFAULT_SPI_CSN_PIN, 1);
   gpio_set_dir(PICO_DEFAULT_SPI_CSN_PIN, GPIO_OUT);
@@ -499,6 +502,7 @@ pio_spi_inst_t *sd_hw_init() {
 }
 
 static void sd_set_highspeed(pio_spi_inst_t *spi, int on) {
+ printf("sd_set_highspeed %d\n", on);
  pio_spi_init(spi->pio, spi->sm, spi_offset,
                 8,       // 8 bits per SPI frame
                 on ? 4.0f : 78.125f, // 400khz @ 125 clk_sys
