@@ -12,6 +12,7 @@
 
 // TODO MJ interface to FPGA via SPI and all the nCS for different bits.
 
+#ifndef CALYPSO
 #define MIST_CSN    17 // user io
 #define MIST_SS2    20 // data io
 #define MIST_SS3    21 // osd
@@ -22,6 +23,9 @@
 // #else
 #define MIST_SS4    22 // dmode?
 // #endif
+#else
+#include "drivers/pins_calypso.h"
+#endif
 
 #define SPI_SLOW_BAUD   500000
 #define SPI_SDC_BAUD   24000000
@@ -58,7 +62,7 @@ static unsigned char spi_speed;
 //   spi_deinit(spi0);
 // }
 
-#define spi spi0
+#define spi spi1
 
 void mist_spi_init() {
   uint8_t csn_lut[] = {MIST_CSN, MIST_SS2, MIST_SS3, MIST_SS4};
@@ -72,15 +76,18 @@ void mist_spi_init() {
 // #ifdef ZXUNO
 //   uint8_t spi_pins[] = {16, 18, 22};
 // #else
+#ifndef CALYPSO
   uint8_t spi_pins[] = {16, 18, 19};
-// #endif
+#else
+  uint8_t spi_pins[] = {GPIO_SPI_SCK, GPIO_SPI_MOSI, GPIO_SPI_MISO};
+#endif /* ifndef CALYPSO */
 
   for (int i=0; i<sizeof spi_pins; i++) {
     gpio_init(spi_pins[i]);
     gpio_set_function(spi_pins[i], GPIO_FUNC_SPI);
   }
-  spi_init(spi0, SPI_SLOW_BAUD); // 500khz
-  spi_set_format(spi0, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+  spi_init(spi, SPI_SLOW_BAUD); // 500khz
+  spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
   spi_speed = SPI_SLOW_CLK_VALUE;
 }
 

@@ -40,6 +40,9 @@
 29  nc
 */
 
+#ifdef CALYPSO
+#include "pins_calypso.h"
+#else
 #define PICO_SD_CLK_PIN 8
 #define PICO_SD_CMD_PIN 7
 #define PICO_SD_DAT0_PIN 6
@@ -84,8 +87,8 @@
 #define GPIO_PS2_DATA     12
 #define GPIO_PS2_CLK2     14
 #define GPIO_PS2_DATA2    15
-#endif
-#endif
+#endif /*ifdef ZXUNO*/
+#endif /*ifdef USBDEV*/
 
 #define GPIO_RP2U_PS2_CLK   GPIO_RP2M_COM4
 #define GPIO_RP2U_PS2_DATA  GPIO_RP2M_COM5
@@ -131,9 +134,9 @@
 #define GPIO_FPGA_CONF_DONE 25
 #else
 #define GPIO_FPGA_CONF_DONE 24
-#endif
+#endif /* ifdef QMTECH */
 #define GPIO_FPGA_NSTATUS 13
-#endif
+#endif /* ifdef ALTERA_FPGA_DEV */
 
 #ifdef IPCDEV
 #define GPIO_IPCM_I2C_CLK   4
@@ -163,6 +166,8 @@
 #endif
 
 #define GPIO_DEBUG_TX_PIN   23
+
+#endif /* ifdef CALPYSO */
 
 // RP2USB
 
@@ -224,13 +229,13 @@
  (SPI1 CSN) (I2C0 SCL) (UART0 RX) GP13 - COM7 - GP15 (SPI1 TX)  (I2C1 SCL)
 */
 
-
+#ifndef CALYPSO 
 #define GPIO_JRT        28
 #define GPIO_JLT        15
 #define GPIO_JDN        14
 #define GPIO_JUP        12
 #define GPIO_JF1        11
-
+#endif
 
 #define RP2X_MIDIAPP    0x1CE07AC1
 #define RP2X_USBAPP     0xE31F853E

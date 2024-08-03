@@ -260,6 +260,7 @@ void DB9Update(uint8_t joy_num, uint8_t usbjoy) {
   SetGpio(usbjoy, JOY_BTN1, GPIO_JF1);
 }
 #else
+#ifndef CALYPSO
 void InitDB9() {}
 const static uint8_t joylut[] = {0, JOY_UP, JOY_DOWN, JOY_LEFT, JOY_RIGHT, JOY_BTN1, JOY_BTN2, 0};
 char GetDB9(char index, unsigned char *joy_map) {
@@ -304,6 +305,7 @@ void DB9Update(uint8_t joy_num, uint8_t usbjoy) {
 
 void DB9SetLegacy(uint8_t on) {
 }
+#endif
 #endif
 
 // TODO MJ implement RTC

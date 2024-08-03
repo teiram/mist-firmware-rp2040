@@ -108,7 +108,7 @@ void set_legacy_mode(uint8_t mode) {
   if (mode != legacy_mode) {
     printf("Setting legacy mode to %d\n", mode);
     DB9SetLegacy(mode == LEGACY_MODE);
-#ifndef ZXUNO
+#if !defined(ZXUNO) && !defined(CALYPSO)
 #ifdef MB2
     ipc_Command(IPC_SETMISTER, &mode, sizeof mode);
 #else
@@ -183,9 +183,9 @@ int mist_init() {
     // Timer_Init();
     USART_Init(115200);
 
-    iprintf("\rMinimig by Dennis van Weeren");
-    iprintf("\rARM Controller by Jakub Bednarski\r\r");
-    iprintf("Version %s\r\r", version+5);
+    iprintf("Minimig by Dennis van Weeren\n");
+    iprintf("ARM Controller by Jakub Bednarski\n");
+    iprintf("Version %s\n", version+5);
 
     mist_spi_init();
 
@@ -316,7 +316,7 @@ int mist_init() {
 
     usb_dev_open();
 
-#ifdef ZXUNO
+#if defined(ZXUNO) || defined(CALYPSO)
   DB9SetLegacy(0);
 #else
 #ifndef MB2
