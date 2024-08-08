@@ -63,7 +63,7 @@ static unsigned char spi_speed;
 // }
 
 #define spi spi1
-
+//#define spi spi0
 void mist_spi_init() {
   uint8_t csn_lut[] = {MIST_CSN, MIST_SS2, MIST_SS3, MIST_SS4};
 
@@ -79,19 +79,23 @@ void mist_spi_init() {
 #ifndef CALYPSO
   uint8_t spi_pins[] = {16, 18, 19};
 #else
+  //uint8_t spi_pins[] = {PICO_DEFAULT_SPI_TX_PIN, PICO_DEFAULT_SPI_RX_PIN, PICO_DEFAULT_SPI_SCK_PIN};
   uint8_t spi_pins[] = {GPIO_SPI_SCK, GPIO_SPI_MOSI, GPIO_SPI_MISO};
 #endif /* ifndef CALYPSO */
-
+  /*
+   * TODO: Centralized SPI shared with SD */
   for (int i=0; i<sizeof spi_pins; i++) {
     gpio_init(spi_pins[i]);
     gpio_set_function(spi_pins[i], GPIO_FUNC_SPI);
   }
   spi_init(spi, SPI_SLOW_BAUD); // 500khz
   spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
+  
   spi_speed = SPI_SLOW_CLK_VALUE;
 }
 
 RAMFUNC void spi_wait4xfer_end() {
+  while (spi_is_busy(spi)) tight_loop_contents;
 }
 
 

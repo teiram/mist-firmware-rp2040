@@ -4,7 +4,6 @@
 set(calypso_driver_src
   ../drivers/fpga_calypso.c
   ../drivers/cyclone_jtag.c
-  ../drivers/pio_spi.c
   ../drivers/ps2.c
   ../drivers/sdcard.c
   ../drivers/bitfile.c
@@ -37,11 +36,11 @@ target_link_libraries(mist-calypso
 target_include_directories(mist-calypso PUBLIC ../usbhost)
 target_include_directories(mist-calypso PUBLIC ../picosynth)
 add_compile_options(-O2)
-pico_generate_pio_header(mist-calypso ../drivers/fpga.pio)
-pico_generate_pio_header(mist-calypso ../drivers/spi.pio)
-pico_generate_pio_header(mist-calypso ../drivers/jamma.pio)
-pico_generate_pio_header(mist-calypso ../drivers/jammadb9.pio)
-pico_generate_pio_header(mist-calypso ../drivers/audio_i2s.pio)
+#pico_generate_pio_header(mist-calypso ../drivers/fpga.pio)
+#pico_generate_pio_header(mist-calypso ../drivers/spi.pio)
+#pico_generate_pio_header(mist-calypso ../drivers/jamma.pio)
+#pico_generate_pio_header(mist-calypso ../drivers/jammadb9.pio)
+#pico_generate_pio_header(mist-calypso ../drivers/audio_i2s.pio)
 pico_generate_pio_header(mist-calypso ../drivers/ps2.pio)
 pico_generate_pio_header(mist-calypso ../drivers/ps2tx.pio)
 pico_enable_stdio_usb(mist-calypso 0)
@@ -58,7 +57,7 @@ target_compile_options(mist-calypso PUBLIC
 #  "-DUSB_STORAGE"
 #  "-DPICOSYNTH"
    "-DUSB_DEBUG_OFF"
-#   "-DDEBUG"
+   "-DDEBUG"
 #  "-DBUFFER_FPGA"
 )
 

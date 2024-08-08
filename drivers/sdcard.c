@@ -3,7 +3,7 @@
 #include <string.h>
 
 #include <pico/time.h>
-
+#include "hardware/spi.h"
 #include "hardware/clocks.h"
 #include "hardware/structs/clocks.h"
 #include "hardware/resets.h"
@@ -11,10 +11,6 @@
 #include "pico/bootrom.h"
 #include "pico/stdlib.h"
 
-#include "hardware/pio.h"
-
-#include "spi.pio.h"
-#include "pio_spi.h"
 #include "sdcard.h"
 
 #include "pins.h"
@@ -22,65 +18,79 @@
 #include "debug.h"
 
 static int is_sdhc = 0;
+static int cs_pin = PICO_SD_CS_PIN;
+
+int sd_set_cs_pin(int pin) {
+  cs_pin = pin;
+}
 
 int sd_is_sdhc() {
   return is_sdhc;
 }
 
-static void sd_set_highspeed(pio_spi_inst_t *spi, int on);
-static int sd_init_card_nosel(pio_spi_inst_t *spi);
+static void sd_set_highspeed(spi_inst_t *spi, int on);
+static int sd_init_card_nosel(spi_inst_t *spi);
 
-static uint8_t sd_spin(pio_spi_inst_t *spi) {
-  uint8_t ff = 0xff;
+static uint8_t sd_spin(spi_inst_t *spi) {
   uint8_t out = 0xff;
-  pio_spi_write8_read8_blocking(spi, &ff, &out, 1);
+  spi_read_blocking(spi, 0xff, &out, 1);
   return out;
 }
 
-static void sd_presignal(pio_spi_inst_t *spi) {
+static void sd_presignal(spi_inst_t *spi) {
   uint8_t sd_presignal_data[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
-  gpio_put(spi->cs_pin, 1);
-  pio_spi_write8_blocking(spi, sd_presignal_data, sizeof sd_presignal_data);
+  gpio_put(cs_pin, 1);
+//  gpio_set_function(PICO_DEFAULT_SPI_TX_PIN, GPIO_FUNC_NULL);
+//  gpio_set_dir(PICO_DEFAULT_SPI_TX_PIN, GPIO_OUT);
+//  gpio_put(PICO_DEFAULT_SPI_TX_PIN, true);
+  spi_write_blocking(spi, sd_presignal_data, sizeof sd_presignal_data);
+//  gpio_set_function(PICO_DEFAULT_SPI_TX_PIN, GPIO_FUNC_SPI);
 }
 
-static void pio_spi_read8_blocking_align(const pio_spi_inst_t *spi, uint8_t *dst, size_t len) {
+static void spi_read8_blocking_align(spi_inst_t *spi, uint8_t *dst, size_t len) {
   *dst = 0xff;
-  pio_spi_read8_blocking_ex(spi, dst, len);
+  uint16_t timeout = 512;
+  while ((*dst) == 0xff && --timeout) {
+    spi_read_blocking(spi, 0xff, dst, 1);
+  }
   if ((*dst) == 0xff) {
+    debug(("SPI timeout!!!\n"));
     return;
   }
-
+  if (len > 1) {
+    spi_read_blocking(spi, 0xff, dst + 1, len - 1);
+  }
 #ifdef DEBUG
   printf("raw read\n");
   hexdump(dst, len);
 #endif
 }
 
-static uint8_t get_next_byte(pio_spi_inst_t *spi) {
+static uint8_t get_next_byte(spi_inst_t *spi) {
   uint8_t buf[1];
-  pio_spi_read8_blocking(spi, buf, sizeof buf);
+  spi_read_blocking(spi, 0xff, buf, sizeof buf);
   return buf[0];
 }
 
-static uint8_t wait_ready(pio_spi_inst_t *spi) {
-  uint8_t ff = 0xff;
+static uint8_t wait_ready(spi_inst_t *spi) {
   uint8_t buf = 0x00;
   int timeout = 2000;
   do {
-    pio_spi_write8_read8_blocking(spi, &ff, &buf, 1);
+    spi_read_blocking(spi, 0xff, &buf, 1);
+    printf("buf is 0x%02x\n", buf);
     timeout --;
   } while (buf != 0xff && timeout);
   return buf;
 }
 
-static void get_bytes(pio_spi_inst_t *spi, uint8_t *block, int len) {
-  pio_spi_read8_blocking(spi, block, len);
+static void get_bytes(spi_inst_t *spi, uint8_t *block, int len) {
+  spi_read_blocking(spi, 0xff, block, len);
 }
 
-static void sd_select(pio_spi_inst_t *spi, uint8_t ncs) {
+static void sd_select(spi_inst_t *spi, uint8_t ncs) {
   uint8_t spin;
   spin = sd_spin(spi); debug(("spin1 %02X\n", spin));
-  gpio_put(spi->cs_pin, ncs);
+  gpio_put(cs_pin, ncs);
   spin = sd_spin(spi); debug(("spin2 %02X\n", spin));
 }
 
@@ -88,7 +98,7 @@ static void sd_select(pio_spi_inst_t *spi, uint8_t ncs) {
 #define CS      2
 
 
-static uint8_t sd_cmd(pio_spi_inst_t *spi, uint8_t cmd[], int cmdlen, uint8_t buf[], int buflen, uint16_t good, int retries, int nocs) {
+static uint8_t sd_cmd(spi_inst_t *spi, uint8_t cmd[], int cmdlen, uint8_t buf[], int buflen, uint16_t good, int retries, int nocs) {
   uint8_t spin = 0xff, ch;
   uint8_t good1 = good & 0xff;
   uint8_t good2 = good >> 8;
@@ -98,13 +108,13 @@ static uint8_t sd_cmd(pio_spi_inst_t *spi, uint8_t cmd[], int cmdlen, uint8_t bu
     sd_select(spi, 0);
     
     if ((ch=wait_ready(spi)) != 0xff) {
-      gpio_put(spi->cs_pin, 1);
+      gpio_put(cs_pin, 1);
       debug(("Retry %02X\n", ch));
       continue;
     }
     
-    pio_spi_write8_blocking(spi, cmd, cmdlen);
-    pio_spi_read8_blocking_align(spi, buf, buflen);
+    spi_write_blocking(spi, cmd, cmdlen);
+    spi_read8_blocking_align(spi, buf, buflen);
 
     if (buf[0] == 0xff || buf[0] == good1 || buf[0] == good2) break;
     if ((nocs & CS) == CS) sd_select(spi, 1);
@@ -114,7 +124,7 @@ static uint8_t sd_cmd(pio_spi_inst_t *spi, uint8_t cmd[], int cmdlen, uint8_t bu
     return 0x00;
   }
   if ((nocs & NOCS) != NOCS || (nocs & CS) == CS) {
-    gpio_put(spi->cs_pin, 1);
+    sd_select(spi, 1);
   }
 
 #ifdef DEBUG
@@ -128,12 +138,11 @@ static uint8_t sd_cmd(pio_spi_inst_t *spi, uint8_t cmd[], int cmdlen, uint8_t bu
 #define DEFAULT_RETRIES   10
 
 
-static uint8_t sd_cxd(pio_spi_inst_t *spi, uint8_t cmd[], uint8_t buf[]) {
+static uint8_t sd_cxd(spi_inst_t *spi, uint8_t cmd[], uint8_t buf[]) {
   uint8_t buf1[1];
-	pio_spi_select(spi, 1);
+	sd_select(spi, 0);
   if (sd_cmd(spi, cmd, 6, buf1, sizeof buf1, 0x00, DEFAULT_RETRIES, 1) != 0x00) {
     sd_select(spi, 1);
-		pio_spi_select(spi, 0);
     return 1;
   }
 
@@ -148,50 +157,66 @@ static uint8_t sd_cxd(pio_spi_inst_t *spi, uint8_t cmd[], uint8_t buf[]) {
 
   if (timeout <= 0) {
     sd_select(spi, 1);
-		pio_spi_select(spi, 0);
+    printf("Timeout in cxd\n");
     return 1;
   }
 
   get_bytes(spi, buf, 16);
-	pio_spi_select(spi, 0);
+#ifdef DEBUG
+  hexdump(buf, 16);
+#endif
+  timeout = 20;
+  while (--timeout) {
+    uint8_t status = get_next_byte(spi);
+    printf("status after %02X\n", status);
+    if (status == 0xff) {
+      break;
+    }
+  }
+  if (timeout == 0) {
+    printf("Timeout after cxd\n");
+  }
+  sd_select(spi, 1);
   return 0;
 }
 
-uint8_t sd_cmd9(pio_spi_inst_t *spi, uint8_t buf[]) { // csd
+uint8_t sd_cmd9(spi_inst_t *spi, uint8_t buf[]) { // csd
   uint8_t cmd[] = {0x49, 0x00, 0x00, 0x00, 0x00, 0xaf};
   return sd_cxd(spi, cmd, buf);
 }
 
-uint8_t sd_cmd10(pio_spi_inst_t *spi, uint8_t buf[]) {
+uint8_t sd_cmd10(spi_inst_t *spi, uint8_t buf[]) {
   uint8_t cmd[] = {0x4a, 0x00, 0x00, 0x00, 0x00, 0x1b};
   return sd_cxd(spi, cmd, buf);
 }
 
-static uint8_t sd_cmd1(pio_spi_inst_t *spi) {
+static uint8_t sd_cmd1(spi_inst_t *spi) {
   uint8_t cmd[] = {0x50, 0x00, 0x00, 0x02, 0x00, 0xff};
   uint8_t buf[1];
+  debug(("sd_cmd1\n"));
   return sd_cmd(spi, cmd, sizeof cmd, buf, sizeof buf, 0x00, DEFAULT_RETRIES, 0);
 }
 
-static uint8_t sd_reset(pio_spi_inst_t *spi) {
+static uint8_t sd_reset(spi_inst_t *spi) {
   uint8_t cmd[] = {0x40, 0x00, 0x00, 0x00, 0x00, 0x95};
   uint8_t buf[1];
   return sd_cmd(spi, cmd, sizeof cmd, buf, sizeof buf, 0x01, DEFAULT_RETRIES, 0);
 }
 
-static uint8_t sd_init(pio_spi_inst_t *spi) {
+static uint8_t sd_init(spi_inst_t *spi) {
   uint8_t cmd[] = {0xff, 0x41, 0x00, 0x00, 0x00, 0x00, 0xff};
   uint8_t buf[1];
   return sd_cmd(spi, cmd, sizeof cmd, buf, sizeof buf, 0x01, DEFAULT_RETRIES, 0);
 }
 
-static uint8_t sd_cmd8(pio_spi_inst_t *spi) {
+static uint8_t sd_cmd8(spi_inst_t *spi) {
   uint8_t cmd[] = {0xff, 0x48, 0x00, 0x00, 0x01, 0xAA, 0x87};
+  debug(("sd_cmd8\n"));
   uint8_t buf[5];
   return sd_cmd(spi, cmd, sizeof cmd, buf, sizeof buf, 0x01, DEFAULT_RETRIES, 0);
 }
 
-static uint8_t sd_cmd55(pio_spi_inst_t *spi) {
+static uint8_t sd_cmd55(spi_inst_t *spi) {
   uint8_t cmd[] = {0xff, 0x77, 0x00, 0x00, 0x00, 0x00, 0xff};
   uint8_t buf[1];
   return sd_cmd(spi, cmd, sizeof cmd, buf, sizeof buf, 0x00, DEFAULT_RETRIES, 0);
@@ -199,24 +224,25 @@ static uint8_t sd_cmd55(pio_spi_inst_t *spi) {
 
 static uint8_t spi_spin = 0xff;
 
-static uint8_t sd_cmd41(pio_spi_inst_t *spi) {
+static uint8_t sd_cmd41(spi_inst_t *spi) {
   uint8_t cmd[] = {0xff, 0x69, 0x40, 0x00, 0x00, 0x00, 0x87};
   uint8_t buf[1];
-
+  debug(("sd_cmd41\n"));
   return sd_cmd(spi, cmd, sizeof cmd, buf, sizeof buf, 0x00, 100, 0);
 }
 
 
-static uint8_t sd_cmd58(pio_spi_inst_t *spi) {
+static uint8_t sd_cmd58(spi_inst_t *spi) {
   uint8_t cmd[] = {0xff, 0x7a, 0x00, 0x00, 0x00, 0x00, 0x75};
   uint8_t buf[5];
+  debug(("sd_cmd58\n"));
   if (sd_cmd(spi, cmd, sizeof cmd, buf, sizeof buf, 0x00, DEFAULT_RETRIES, 0) == 0x00) {
     return buf[1];
   }
   return 0xff;
 }
 
-static uint8_t sd_cmd59(pio_spi_inst_t *spi) {
+static uint8_t sd_cmd59(spi_inst_t *spi) {
   uint8_t cmd[] = {0x7b, 0x00, 0x00, 0x00, 0x00, 0xff};
   uint8_t buf[8];
   return sd_cmd(spi, cmd, sizeof cmd, buf, sizeof buf, 0x01, DEFAULT_RETRIES, 0);
@@ -230,7 +256,7 @@ static uint8_t sd_cmd9(pio_spi_inst_t *spi) {
 }
 #endif
 
-uint8_t sd_writesector(pio_spi_inst_t *spi, uint32_t lba, uint8_t *data) {
+uint8_t sd_writesector(spi_inst_t *spi, uint32_t lba, uint8_t *data) {
   uint8_t cmd[] = {0xff, 0x58, 0x00, 0x00, 0x00, 0x00, 0xff};
   uint8_t writegap[] = {0xff, 0xfe};
   uint8_t crc[] = {0xff, 0xff, 0xff};
@@ -245,19 +271,19 @@ uint8_t sd_writesector(pio_spi_inst_t *spi, uint32_t lba, uint8_t *data) {
   cmd[4] = (lba >> 8) & 0xff;
   cmd[5] = lba & 0xff;
 
-	pio_spi_select(spi, 1);
+	gpio_put(cs_pin, 0);
   sd_select(spi, 0);
   
   if (sd_cmd(spi, cmd, sizeof cmd, buf, sizeof buf, 0x00, DEFAULT_RETRIES, 1)!=0x00) {
     sd_select(spi, 1);
-		pio_spi_select(spi, 0);
+	  gpio_put(cs_pin, 1);
     debug(("Write failed 1 %02X\n", buf[0]));
     return 1;
   }
   
-  pio_spi_write8_blocking(spi, writegap, sizeof writegap);
-  pio_spi_write8_blocking(spi, data, 512);
-  pio_spi_write8_blocking(spi, crc, sizeof crc);
+  spi_write_blocking(spi, writegap, sizeof writegap);
+  spi_write_blocking(spi, data, 512);
+  spi_write_blocking(spi, crc, sizeof crc);
 
   int timeout = 100000;
   while (timeout--) {
@@ -269,14 +295,14 @@ uint8_t sd_writesector(pio_spi_inst_t *spi, uint32_t lba, uint8_t *data) {
   }
   
   sd_select(spi, 1);
-	pio_spi_select(spi, 0);
+	gpio_put(cs_pin, 1);
   return timeout > 0 ? 0 : 1;
 }  
 
 // #define SD_NO_CRC
 
 // #define debug(a) printf a
-static uint8_t sd_readsector_ll(pio_spi_inst_t *spi, uint32_t lba, uint8_t *sector) {
+static uint8_t sd_readsector_ll(spi_inst_t *spi, uint32_t lba, uint8_t *sector) {
   uint8_t cmd[] = {0x51, 0x00, 0x05, 0x00, 0x00, 0xff};
   uint8_t buf[1];
   uint8_t spin;
@@ -344,12 +370,12 @@ int xretryused = 0;
 int xretry2used = 0;
 #endif
 
-uint8_t sd_readsector(pio_spi_inst_t *spi, uint32_t lba, uint8_t *sector) {
+uint8_t sd_readsector(spi_inst_t *spi, uint32_t lba, uint8_t *sector) {
   int retries, resets = 3;
   
   debug(("SD: lba %08X ", lba));
 
-  pio_spi_select(spi, 1);
+	gpio_put(cs_pin, 0);
   do {
     retries = 10;
     while (sd_readsector_ll(spi, lba, sector) && retries --) {
@@ -360,7 +386,7 @@ uint8_t sd_readsector(pio_spi_inst_t *spi, uint32_t lba, uint8_t *sector) {
     }
   
     if (retries >= 0) {
-			pio_spi_select(spi, 0);
+	    gpio_put(cs_pin, 1);
       debug(("\n"));
       return 0;
     }
@@ -372,21 +398,21 @@ uint8_t sd_readsector(pio_spi_inst_t *spi, uint32_t lba, uint8_t *sector) {
   } while (resets--);
 
   // failed
-	pio_spi_select(spi, 0);
+	gpio_put(cs_pin, 1);
   debug((" Failed!\n"));
   return 1;
 }
 
 // 694000000077
 
-static int sd_init_card_ll(pio_spi_inst_t *spi) {
+static int sd_init_card_ll(spi_inst_t *spi) {
   is_sdhc = 0;
   sd_presignal(spi);
-
+  printf("After sd_presignal\n");
   if (wait_ready(spi) != 0xff) {
     return 0;
   }
-  
+  printf("After wait_ready\n");
   sd_select(spi, 0);
   if (sd_reset(spi) == 0x01) {
 //     if (sd_init(spi) == 0x01) {
@@ -395,6 +421,7 @@ static int sd_init_card_ll(pio_spi_inst_t *spi) {
         while (retries --) {
           if (sd_cmd55(spi) == 0x01) {
             if (sd_cmd41(spi) == 0x00) {
+              debug(("cmd41 got zero\n"));
               break;
             }
           }
@@ -416,12 +443,14 @@ static int sd_init_card_ll(pio_spi_inst_t *spi) {
         }
       }
 //     }
+  } else {
+    printf("sd_reset failed\n");
   }
   return 0;
 }
 
 
-static int sd_init_card_nosel(pio_spi_inst_t *spi) {
+static int sd_init_card_nosel(spi_inst_t *spi) {
   int timeout = 10;
   sd_set_highspeed(spi, 0);
   while (!sd_init_card_ll(spi) && timeout --)
@@ -434,81 +463,41 @@ static int sd_init_card_nosel(pio_spi_inst_t *spi) {
   return timeout > 0 ? 0 : 1;
 }
 
-int sd_init_card(pio_spi_inst_t *spi) {
+int sd_init_card(spi_inst_t *spi) {
   int r;
-  printf("sd_init_card with miso:%d, mosi:%d, clk:%d, cs:%d\n", 
-     spi->miso_pin, spi->mosi_pin, spi->sck_pin, spi->cs_pin);
 
-  pio_spi_select(spi, 1);
+	gpio_put(cs_pin, 0);
   r = sd_init_card_nosel(spi);
-  pio_spi_select(spi, 0);
+	gpio_put(cs_pin, 1);
   return r;
 }
 
 static uint spi_offset = 0;
-void sd_hw_kill(pio_spi_inst_t *spi) {
-  pio_sm_set_enabled(spi->pio, spi->sm, false);
-  pio_spi_kill(spi->pio, spi->sm, 
-                PICO_DEFAULT_SPI_SCK_PIN,
-                PICO_DEFAULT_SPI_TX_PIN,
-                PICO_DEFAULT_SPI_RX_PIN);
+void sd_hw_kill(spi_inst_t *spi) {
+  spi_deinit(spi);
   gpio_set_dir(PICO_DEFAULT_SPI_CSN_PIN, GPIO_IN);
 }
 
-static pio_spi_inst_t spi = {
-    .pio = SDCARD_PIO,
-    .sm = SDCARD_SM,
-    .cs_pin = PICO_DEFAULT_SPI_CSN_PIN,
-    .sck_pin = PICO_DEFAULT_SPI_SCK_PIN,
-    .mosi_pin = PICO_DEFAULT_SPI_TX_PIN,
-    .miso_pin = PICO_DEFAULT_SPI_RX_PIN
-};
+static spi_inst_t* spi = spi0;
 
-pio_spi_inst_t *sd_hw_init() {
+spi_inst_t *sd_hw_init() {
   static int firsttime = 1;
   printf("Initializing SPI PIO\n");
-
+  gpio_init(PICO_DEFAULT_SPI_TX_PIN);
+  gpio_set_function(PICO_DEFAULT_SPI_TX_PIN, GPIO_FUNC_SPI);
+  gpio_init(PICO_DEFAULT_SPI_SCK_PIN);
+  gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
+  gpio_init(PICO_DEFAULT_SPI_RX_PIN);
+  gpio_set_function(PICO_DEFAULT_SPI_RX_PIN, GPIO_FUNC_SPI);
+  spi_init(spi, 400 * 1000);
+  spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
   gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
-  gpio_put(PICO_DEFAULT_SPI_CSN_PIN, 1);
   gpio_set_dir(PICO_DEFAULT_SPI_CSN_PIN, GPIO_OUT);
-  
-  gpio_pull_up(PICO_DEFAULT_SPI_RX_PIN);
-#ifdef PULL_UP_LINES
-  gpio_pull_up(PICO_DEFAULT_SPI_CSN_PIN);
-  gpio_pull_up(PICO_DEFAULT_SPI_SCK_PIN);
-  gpio_pull_up(PICO_DEFAULT_SPI_TX_PIN);
-#endif
-
-  if (firsttime) {
-    firsttime = 0;
-#ifdef SDCARD_OFFSET
-   pio_add_program_at_offset(spi.pio, &spi_cpha0_program, SDCARD_OFFSET);
-   spi_offset = SDCARD_OFFSET;
-#else
-    spi_offset = pio_add_program(spi.pio, &spi_cpha0_program);
-#endif
-    printf("Loaded program at %d\n", spi_offset);
-  }
-
-  pio_spi_init(spi.pio, spi.sm, spi_offset,
-                8,       // 8 bits per SPI frame
-                78.125f, // 400khz @ 125 clk_sys
-                false,   // CPOL = 0
-                PICO_DEFAULT_SPI_SCK_PIN,
-                PICO_DEFAULT_SPI_TX_PIN,
-                PICO_DEFAULT_SPI_RX_PIN);
-  
-  return &spi;
+  return spi;
 }
 
-static void sd_set_highspeed(pio_spi_inst_t *spi, int on) {
+static void sd_set_highspeed(spi_inst_t *spi, int on) {
  printf("sd_set_highspeed %d\n", on);
- pio_spi_init(spi->pio, spi->sm, spi_offset,
-                8,       // 8 bits per SPI frame
-                on ? 4.0f : 78.125f, // 400khz @ 125 clk_sys
-                false,   // CPOL = 0
-                PICO_DEFAULT_SPI_SCK_PIN,
-                PICO_DEFAULT_SPI_TX_PIN,
-                PICO_DEFAULT_SPI_RX_PIN);
+ spi_set_baudrate(spi, on ? 25000000 : 400000);
  }
 
