@@ -57,7 +57,7 @@ target_compile_options(mist-calypso PUBLIC
 #  "-DUSB_STORAGE"
 #  "-DPICOSYNTH"
    "-DUSB_DEBUG_OFF"
-   "-DDEBUG"
+#   "-DDEBUG"
 #  "-DBUFFER_FPGA"
 )
 
