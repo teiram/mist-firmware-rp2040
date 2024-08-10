@@ -39,14 +39,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "spi.h"
 
 #include "mmc.h"
-
-#include "drivers/pio_spi.h"
+#include "hardware/spi.h"
 #include "drivers/sdcard.h"
 // #define DEBUG
 #include "drivers/debug.h"
 
 
-static pio_spi_inst_t *spi = NULL;
+static spi_inst_t *spi = NULL;
 
 unsigned char MMC_Init(void) {
 #ifdef DEVKIT_DEBUG
@@ -116,6 +115,7 @@ unsigned char MMC_WriteMultiple(unsigned long lba, const unsigned char *pWriteBu
 
 unsigned char MMC_GetCSD(unsigned char *b) {
 #ifndef DEVKIT_DEBUG
+    debug(("MMC_GetCSD\n"));
     return sd_cmd9(spi, b);
 #else
     return 0;
@@ -124,6 +124,7 @@ unsigned char MMC_GetCSD(unsigned char *b) {
 
 unsigned char MMC_GetCID(unsigned char *b) {
 #ifndef DEVKIT_DEBUG
+    debug(("MMC_GetCID\n"));
     return sd_cmd10(spi, b);
 #else
     return 0;

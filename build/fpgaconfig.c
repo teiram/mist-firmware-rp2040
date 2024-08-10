@@ -213,7 +213,7 @@ unsigned char ConfigureFpga(const char *bitfile) {
   cf->error = 0;
 
   debug(("cf.size = %ld\n", cf->size));
-  iprintf("FPGA bitstream file %s opened, file size = %ld\r", bitfile, cf->size);
+  iprintf("FPGA bitstream file %s opened, file size = %ld\n", bitfile, cf->size);
 
 #ifdef XILINX
   if (bitfile && !strcasecmp(&bitfile[strlen(bitfile)-4], ".ZXT")) {

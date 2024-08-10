@@ -41,7 +41,7 @@
 #define PICO_SD_CLK_PIN 	2
 #define PICO_SD_CMD_PIN 	3
 #define PICO_SD_DAT0_PIN 	4
-#define DPICO_SD_CS_PIN 	5
+#define PICO_SD_CS_PIN 	5
 
 #define PICO_DEFAULT_SPI_SCK_PIN 2
 #define PICO_DEFAULT_SPI_TX_PIN  3
