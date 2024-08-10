@@ -487,6 +487,7 @@ spi_inst_t *sd_hw_init() {
   gpio_set_function(PICO_DEFAULT_SPI_TX_PIN, GPIO_FUNC_SPI);
   gpio_init(PICO_DEFAULT_SPI_SCK_PIN);
   gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
+  gpio_set_drive_strength(PICO_DEFAULT_SPI_SCK_PIN, GPIO_DRIVE_STRENGTH_12MA);
   gpio_init(PICO_DEFAULT_SPI_RX_PIN);
   gpio_set_function(PICO_DEFAULT_SPI_RX_PIN, GPIO_FUNC_SPI);
   spi_init(spi, 400 * 1000);
