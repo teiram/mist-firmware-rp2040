@@ -77,7 +77,6 @@ static uint8_t wait_ready(spi_inst_t *spi) {
   int timeout = 2000;
   do {
     spi_read_blocking(spi, 0xff, &buf, 1);
-    printf("buf is 0x%02x\n", buf);
     timeout --;
   } while (buf != 0xff && timeout);
   return buf;
@@ -487,9 +486,13 @@ spi_inst_t *sd_hw_init() {
   gpio_set_function(PICO_DEFAULT_SPI_TX_PIN, GPIO_FUNC_SPI);
   gpio_init(PICO_DEFAULT_SPI_SCK_PIN);
   gpio_set_function(PICO_DEFAULT_SPI_SCK_PIN, GPIO_FUNC_SPI);
-  gpio_set_drive_strength(PICO_DEFAULT_SPI_SCK_PIN, GPIO_DRIVE_STRENGTH_12MA);
   gpio_init(PICO_DEFAULT_SPI_RX_PIN);
   gpio_set_function(PICO_DEFAULT_SPI_RX_PIN, GPIO_FUNC_SPI);
+
+  gpio_set_drive_strength(PICO_DEFAULT_SPI_SCK_PIN, GPIO_DRIVE_STRENGTH_12MA);
+  gpio_set_drive_strength(PICO_DEFAULT_SPI_TX_PIN, GPIO_DRIVE_STRENGTH_12MA);
+  gpio_set_drive_strength(PICO_DEFAULT_SPI_RX_PIN, GPIO_DRIVE_STRENGTH_12MA);
+
   spi_init(spi, 400 * 1000);
   spi_set_format(spi, 8, SPI_CPOL_1, SPI_CPHA_1, SPI_MSB_FIRST);
   gpio_init(PICO_DEFAULT_SPI_CSN_PIN);
