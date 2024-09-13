@@ -12,7 +12,6 @@ int fpga_ResetButtonState() {
   return 0;
 }
 
-
 int fpga_initialise() {
   printf("fpga_initialise\n");
   return 0;
@@ -20,7 +19,6 @@ int fpga_initialise() {
 
 int fpga_claim(uint8_t claim) {
   printf("fpga_claim %d\n", claim);
-  jtag_disable();
   return 0;
 }
 
@@ -33,7 +31,6 @@ int fpga_reset() {
   return 0;
 }
 
-
 int fpga_configure(void *user_data, uint8_t (*next_block)(void *, uint8_t *), uint32_t assumelength) {
   printf("fpga_configure. File size %d\n", assumelength);
   uint8_t bits[CHUNKSIZE];
@@ -41,7 +38,6 @@ int fpga_configure(void *user_data, uint8_t (*next_block)(void *, uint8_t *), ui
     /* No data to read */
     return 1;
   }
-  jtag_enable();
   /*
   if (jtag_scan() != 0) {
     return 1;
