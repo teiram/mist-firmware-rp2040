@@ -36,10 +36,30 @@ void jtag_enable() {
 }
 
 void jtag_disable() {
-    gpio_set_dir(TDO, GPIO_IN);
+    gpio_put(TDI, true);
+    gpio_put(TCK, false);
+    gpio_put(TMS, true);
+
     gpio_set_dir(TDI, GPIO_IN);
     gpio_set_dir(TCK, GPIO_IN);
     gpio_set_dir(TMS, GPIO_IN);
+    gpio_set_input_enabled(TDI, false);
+    gpio_set_input_enabled(TCK, false);
+    gpio_set_input_enabled(TMS, false);
+    gpio_set_input_enabled(TDO, false);
+
+    
+    gpio_set_pulls(TDI, false, true);
+    gpio_set_pulls(TCK, false, true);
+    gpio_set_pulls(TMS, false, true);
+    gpio_set_pulls(TDO, false, true);
+    
+    /*
+    gpio_deinit(TDO);
+    gpio_deinit(TDI);
+    gpio_deinit(TCK);
+    gpio_deinit(TMS);
+    */
 }
 
 static void jtag_tck() {
